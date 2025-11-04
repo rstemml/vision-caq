@@ -1,9 +1,14 @@
+"use client";
+
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
+import { useAuth } from "@/contexts/auth-context";
+import { ProtectedRoute } from "@/components/protected-route";
+import { AppHeader } from "@/components/app-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { FileText, Plus, Settings } from "lucide-react";
+import { FileText, Plus, Settings, Loader2 } from "lucide-react";
 
 const categoryLabels = {
   TECHNICAL_DRAWING: "Technische Zeichnung",
@@ -11,34 +16,37 @@ const categoryLabels = {
   INVOICE: "Rechnung",
 };
 
-export default async function TestPlansPage() {
-  const testPlans = await prisma.testPlan.findMany({
-    include: {
-      procedures: {
-        include: {
-          steps: true,
+export default function TestPlansPage() {
+  const { token } = useAuth();
+  const [testPlans, setTestPlans] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (token) {
+      fetchTestPlans();
+    }
+  }, [token]);
+
+  const fetchTestPlans = async () => {
+    try {
+      const response = await fetch("/api/test-plans", {
+        headers: {
+          'Authorization': `Bearer ${token}`,
         },
-      },
-      _count: {
-        select: {
-          testRuns: true,
-        },
-      },
-    },
-    orderBy: {
-      createdAt: "desc",
-    },
-  });
+      });
+      const data = await response.json();
+      setTestPlans(data);
+    } catch (err) {
+      console.error("Error fetching test plans:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <div className="min-h-screen">
-      <header className="border-b">
-        <div className="container mx-auto px-4 py-4">
-          <Link href="/" className="text-2xl font-bold text-primary">
-            Vision CAQ
-          </Link>
-        </div>
-      </header>
+    <ProtectedRoute>
+      <div className="min-h-screen">
+        <AppHeader />
 
       <main className="container mx-auto px-4 py-8">
         <div className="flex justify-between items-center mb-8">
@@ -56,7 +64,12 @@ export default async function TestPlansPage() {
           </Link>
         </div>
 
-        {testPlans.length === 0 ? (
+        {loading ? (
+          <div className="text-center py-12">
+            <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
+            <p className="text-muted-foreground">Prüfpläne werden geladen...</p>
+          </div>
+        ) : testPlans.length === 0 ? (
           <Card>
             <CardContent className="py-12 text-center">
               <FileText className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
@@ -130,6 +143,7 @@ export default async function TestPlansPage() {
           </div>
         )}
       </main>
-    </div>
+      </div>
+    </ProtectedRoute>
   );
 }

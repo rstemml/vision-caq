@@ -1,9 +1,14 @@
+"use client";
+
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
+import { useAuth } from "@/contexts/auth-context";
+import { ProtectedRoute } from "@/components/protected-route";
+import { AppHeader } from "@/components/app-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ClipboardCheck, FileText } from "lucide-react";
+import { ClipboardCheck, FileText, Loader2 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 
 const resultLabels = {
@@ -12,29 +17,37 @@ const resultLabels = {
   WARNING: { label: "Warnung", variant: "warning" as const },
 };
 
-export default async function ReportsPage() {
-  const reports = await prisma.testReport.findMany({
-    include: {
-      testRun: {
-        include: {
-          testPlan: true,
+export default function ReportsPage() {
+  const { token } = useAuth();
+  const [reports, setReports] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (token) {
+      fetchReports();
+    }
+  }, [token]);
+
+  const fetchReports = async () => {
+    try {
+      const response = await fetch("/api/reports", {
+        headers: {
+          'Authorization': `Bearer ${token}`,
         },
-      },
-    },
-    orderBy: {
-      createdAt: "desc",
-    },
-  });
+      });
+      const data = await response.json();
+      setReports(data);
+    } catch (err) {
+      console.error("Error fetching reports:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <div className="min-h-screen">
-      <header className="border-b">
-        <div className="container mx-auto px-4 py-4">
-          <Link href="/" className="text-2xl font-bold text-primary">
-            Vision CAQ
-          </Link>
-        </div>
-      </header>
+    <ProtectedRoute>
+      <div className="min-h-screen">
+        <AppHeader />
 
       <main className="container mx-auto px-4 py-8">
         <div className="mb-8">
@@ -44,7 +57,12 @@ export default async function ReportsPage() {
           </p>
         </div>
 
-        {reports.length === 0 ? (
+        {loading ? (
+          <div className="text-center py-12">
+            <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
+            <p className="text-muted-foreground">Protokolle werden geladen...</p>
+          </div>
+        ) : reports.length === 0 ? (
           <Card>
             <CardContent className="py-12 text-center">
               <ClipboardCheck className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
@@ -118,6 +136,7 @@ export default async function ReportsPage() {
           </div>
         )}
       </main>
-    </div>
+      </div>
+    </ProtectedRoute>
   );
 }

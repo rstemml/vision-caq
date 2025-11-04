@@ -1,9 +1,14 @@
+"use client";
+
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
+import { useAuth } from "@/contexts/auth-context";
+import { ProtectedRoute } from "@/components/protected-route";
+import { AppHeader } from "@/components/app-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { GitBranch, Plus, Play, Settings } from "lucide-react";
+import { GitBranch, Plus, Play, Settings, Loader2 } from "lucide-react";
 
 const categoryLabels = {
   TECHNICAL_DRAWING: "Technische Zeichnung",
@@ -11,31 +16,37 @@ const categoryLabels = {
   INVOICE: "Rechnung",
 };
 
-export default async function WorkflowsPage() {
-  const workflows = await prisma.workflow.findMany({
-    include: {
-      nodes: true,
-      edges: true,
-      _count: {
-        select: {
-          executions: true,
+export default function WorkflowsPage() {
+  const { token } = useAuth();
+  const [workflows, setWorkflows] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (token) {
+      fetchWorkflows();
+    }
+  }, [token]);
+
+  const fetchWorkflows = async () => {
+    try {
+      const response = await fetch("/api/workflows", {
+        headers: {
+          'Authorization': `Bearer ${token}`,
         },
-      },
-    },
-    orderBy: {
-      createdAt: "desc",
-    },
-  });
+      });
+      const data = await response.json();
+      setWorkflows(data);
+    } catch (err) {
+      console.error("Error fetching workflows:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <div className="min-h-screen">
-      <header className="border-b">
-        <div className="container mx-auto px-4 py-4">
-          <Link href="/" className="text-2xl font-bold text-primary">
-            Vision CAQ
-          </Link>
-        </div>
-      </header>
+    <ProtectedRoute>
+      <div className="min-h-screen">
+        <AppHeader />
 
       <main className="container mx-auto px-4 py-8">
         <div className="flex justify-between items-center mb-8">
@@ -53,7 +64,12 @@ export default async function WorkflowsPage() {
           </Link>
         </div>
 
-        {workflows.length === 0 ? (
+        {loading ? (
+          <div className="text-center py-12">
+            <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
+            <p className="text-muted-foreground">Workflows werden geladen...</p>
+          </div>
+        ) : workflows.length === 0 ? (
           <Card>
             <CardContent className="py-12 text-center">
               <GitBranch className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
@@ -134,6 +150,7 @@ export default async function WorkflowsPage() {
           </div>
         )}
       </main>
-    </div>
+      </div>
+    </ProtectedRoute>
   );
 }
