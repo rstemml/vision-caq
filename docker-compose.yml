@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: vision-caq-db
+    environment:
+      POSTGRES_USER: visioncaq
+      POSTGRES_PASSWORD: visioncaq123
+      POSTGRES_DB: vision_caq
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U visioncaq"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  python-service:
+    build:
+      context: ./python-service
+      dockerfile: Dockerfile
+    container_name: vision-caq-python
+    environment:
+      LLM_API_KEY: ${LLM_API_KEY}
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4-vision-preview}
+      PORT: 8000
+      HOST: 0.0.0.0
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./python-service:/app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  nextjs:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vision-caq-app
+    environment:
+      DATABASE_URL: postgresql://visioncaq:visioncaq123@postgres:5432/vision_caq?schema=public
+      PYTHON_SERVICE_URL: http://python-service:8000
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      python-service:
+        condition: service_healthy
+    volumes:
+      - ./uploads:/app/uploads
+
+volumes:
+  postgres_data:

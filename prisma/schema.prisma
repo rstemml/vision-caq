@@ -1,0 +1,137 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Prüfplan - definiert welche Prüfungen durchgeführt werden sollen
+model TestPlan {
+  id          String      @id @default(cuid())
+  name        String
+  description String?
+  category    DocumentCategory // Zeichnung, Etikett, Rechnung
+  active      Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  procedures  Procedure[]
+  testRuns    TestRun[]
+
+  @@map("test_plans")
+}
+
+enum DocumentCategory {
+  TECHNICAL_DRAWING // Technische Zeichnung
+  LABEL            // Etikett
+  INVOICE          // Rechnung
+}
+
+// Prozedur - eine Sammlung von Prüfschritten
+model Procedure {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  order       Int      @default(0)
+  testPlanId  String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  testPlan    TestPlan        @relation(fields: [testPlanId], references: [id], onDelete: Cascade)
+  steps       ProcedureStep[]
+
+  @@map("procedures")
+}
+
+// Prüfschritt - einzelner Prüfschritt innerhalb einer Prozedur
+model ProcedureStep {
+  id           String          @id @default(cuid())
+  name         String
+  description  String
+  checkType    CheckType
+  parameters   Json            // Flexible Parameter je nach CheckType
+  order        Int             @default(0)
+  required     Boolean         @default(true)
+  procedureId  String
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  procedure    Procedure       @relation(fields: [procedureId], references: [id], onDelete: Cascade)
+  testResults  TestResult[]
+
+  @@map("procedure_steps")
+}
+
+enum CheckType {
+  PRESENCE       // Vorhandensein prüfen
+  FIELD_VALUE    // Feldwert validieren
+  LEGAL_REQUIREMENT // Gesetzliche Vorgabe
+  DIN_STANDARD   // DIN-Norm
+  IMAGE_QUALITY  // Bildqualität
+  TEXT_EXTRACTION // Text-Extraktion und Validierung
+  CUSTOM         // Benutzerdefiniert
+}
+
+// Prüfung - eine Instanz der Prüfung eines PDFs
+model TestRun {
+  id              String        @id @default(cuid())
+  testPlanId      String
+  fileName        String
+  filePath        String
+  fileSize        Int
+  status          TestStatus    @default(PENDING)
+  startedAt       DateTime      @default(now())
+  completedAt     DateTime?
+
+  testPlan        TestPlan      @relation(fields: [testPlanId], references: [id])
+  testReport      TestReport?
+  testResults     TestResult[]
+
+  @@map("test_runs")
+}
+
+enum TestStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}
+
+// Prüfprotokoll - das finale Ergebnis einer Prüfung
+model TestReport {
+  id              String        @id @default(cuid())
+  testRunId       String        @unique
+  overallResult   ResultStatus
+  summary         String?
+  metadata        Json?         // Zusätzliche Informationen
+  createdAt       DateTime      @default(now())
+
+  testRun         TestRun       @relation(fields: [testRunId], references: [id], onDelete: Cascade)
+
+  @@map("test_reports")
+}
+
+// Einzelnes Prüfergebnis
+model TestResult {
+  id              String        @id @default(cuid())
+  testRunId       String
+  stepId          String
+  result          ResultStatus
+  message         String?
+  details         Json?         // Detaillierte Ergebnisse vom LLM
+  createdAt       DateTime      @default(now())
+
+  testRun         TestRun       @relation(fields: [testRunId], references: [id], onDelete: Cascade)
+  step            ProcedureStep @relation(fields: [stepId], references: [id])
+
+  @@map("test_results")
+}
+
+enum ResultStatus {
+  PASSED
+  FAILED
+  WARNING
+  NOT_APPLICABLE
+}
