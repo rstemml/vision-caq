@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
+import { authenticatedRoute, getOrgId, can, AuthenticatedRequest } from '@/lib/middleware';
 
 const workflowUpdateSchema = z.object({
   name: z.string().min(1).optional(),
@@ -9,13 +10,18 @@ const workflowUpdateSchema = z.object({
   active: z.boolean().optional(),
 });
 
-export async function GET(
-  request: NextRequest,
+export const GET = authenticatedRoute(async (
+  req: AuthenticatedRequest,
   { params }: { params: { id: string } }
-) {
+) => {
   try {
+    const orgId = getOrgId(req);
+
     const workflow = await prisma.workflow.findUnique({
-      where: { id: params.id },
+      where: {
+        id: params.id,
+        orgId,
+      },
       include: {
         nodes: {
           orderBy: {
@@ -46,18 +52,31 @@ export async function GET(
       { status: 500 }
     );
   }
-}
+});
 
-export async function PATCH(
-  request: NextRequest,
+export const PATCH = authenticatedRoute(async (
+  req: AuthenticatedRequest,
   { params }: { params: { id: string } }
-) {
+) => {
   try {
-    const body = await request.json();
+    const orgId = getOrgId(req);
+
+    // Check if user has permission to update workflows
+    if (!can(req, 'workflow', 'update')) {
+      return NextResponse.json(
+        { error: 'Keine Berechtigung zum Aktualisieren von Workflows' },
+        { status: 403 }
+      );
+    }
+
+    const body = await req.json();
     const validatedData = workflowUpdateSchema.parse(body);
 
     const workflow = await prisma.workflow.update({
-      where: { id: params.id },
+      where: {
+        id: params.id,
+        orgId,
+      },
       data: validatedData,
       include: {
         nodes: true,
@@ -79,15 +98,28 @@ export async function PATCH(
       { status: 500 }
     );
   }
-}
+});
 
-export async function DELETE(
-  request: NextRequest,
+export const DELETE = authenticatedRoute(async (
+  req: AuthenticatedRequest,
   { params }: { params: { id: string } }
-) {
+) => {
   try {
+    const orgId = getOrgId(req);
+
+    // Check if user has permission to delete workflows
+    if (!can(req, 'workflow', 'delete')) {
+      return NextResponse.json(
+        { error: 'Keine Berechtigung zum Löschen von Workflows' },
+        { status: 403 }
+      );
+    }
+
     await prisma.workflow.delete({
-      where: { id: params.id },
+      where: {
+        id: params.id,
+        orgId,
+      },
     });
 
     return NextResponse.json({ success: true });
@@ -98,4 +130,4 @@ export async function DELETE(
       { status: 500 }
     );
   }
-}
+});

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
+import { authenticatedRoute, getOrgId, can, AuthenticatedRequest } from '@/lib/middleware';
 
 const testPlanUpdateSchema = z.object({
   name: z.string().min(1).optional(),
@@ -9,13 +10,18 @@ const testPlanUpdateSchema = z.object({
   active: z.boolean().optional(),
 });
 
-export async function GET(
-  request: NextRequest,
+export const GET = authenticatedRoute(async (
+  req: AuthenticatedRequest,
   { params }: { params: { id: string } }
-) {
+) => {
   try {
+    const orgId = getOrgId(req);
+
     const testPlan = await prisma.testPlan.findUnique({
-      where: { id: params.id },
+      where: {
+        id: params.id,
+        orgId,
+      },
       include: {
         procedures: {
           include: {
@@ -47,18 +53,31 @@ export async function GET(
       { status: 500 }
     );
   }
-}
+});
 
-export async function PATCH(
-  request: NextRequest,
+export const PATCH = authenticatedRoute(async (
+  req: AuthenticatedRequest,
   { params }: { params: { id: string } }
-) {
+) => {
   try {
-    const body = await request.json();
+    const orgId = getOrgId(req);
+
+    // Check if user has permission to update test plans
+    if (!can(req, 'testPlan', 'update')) {
+      return NextResponse.json(
+        { error: 'Keine Berechtigung zum Aktualisieren von Prüfplänen' },
+        { status: 403 }
+      );
+    }
+
+    const body = await req.json();
     const validatedData = testPlanUpdateSchema.parse(body);
 
     const testPlan = await prisma.testPlan.update({
-      where: { id: params.id },
+      where: {
+        id: params.id,
+        orgId,
+      },
       data: validatedData,
       include: {
         procedures: {
@@ -83,15 +102,28 @@ export async function PATCH(
       { status: 500 }
     );
   }
-}
+});
 
-export async function DELETE(
-  request: NextRequest,
+export const DELETE = authenticatedRoute(async (
+  req: AuthenticatedRequest,
   { params }: { params: { id: string } }
-) {
+) => {
   try {
+    const orgId = getOrgId(req);
+
+    // Check if user has permission to delete test plans
+    if (!can(req, 'testPlan', 'delete')) {
+      return NextResponse.json(
+        { error: 'Keine Berechtigung zum Löschen von Prüfplänen' },
+        { status: 403 }
+      );
+    }
+
     await prisma.testPlan.delete({
-      where: { id: params.id },
+      where: {
+        id: params.id,
+        orgId,
+      },
     });
 
     return NextResponse.json({ success: true });
@@ -102,4 +134,4 @@ export async function DELETE(
       { status: 500 }
     );
   }
-}
+});

@@ -1,13 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { authenticatedRoute, getOrgId, AuthenticatedRequest } from '@/lib/middleware';
 
-export async function GET(
-  request: NextRequest,
+export const GET = authenticatedRoute(async (
+  req: AuthenticatedRequest,
   { params }: { params: { id: string } }
-) {
+) => {
   try {
+    const orgId = getOrgId(req);
+
     const testRun = await prisma.testRun.findUnique({
-      where: { id: params.id },
+      where: {
+        id: params.id,
+        orgId,
+      },
       include: {
         testPlan: {
           include: {
@@ -42,4 +48,4 @@ export async function GET(
       { status: 500 }
     );
   }
-}
+});

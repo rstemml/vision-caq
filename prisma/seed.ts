@@ -1,13 +1,93 @@
 import { PrismaClient } from '@prisma/client';
+import { createOrganization } from '../lib/auth';
 
 const prisma = new PrismaClient();
 
 async function main() {
   console.log('Start seeding...');
 
+  // ============================================
+  // CREATE ORGANIZATIONS AND USERS
+  // ============================================
+
+  console.log('Creating organizations...');
+
+  // Organization 1: Automotive company
+  const org1 = await createOrganization({
+    name: 'AutoParts GmbH',
+    slug: 'autoparts-gmbh',
+    domain: 'autoparts.example.com',
+    adminEmail: 'admin@autoparts.example.com',
+    adminPassword: 'Password123!',
+    adminName: 'Max Mustermann',
+  });
+  console.log(`Created organization: ${org1.name} (ID: ${org1.id})`);
+
+  // Create additional users for AutoParts
+  const org1Manager = await prisma.user.create({
+    data: {
+      email: 'manager@autoparts.example.com',
+      name: 'Anna Manager',
+      passwordHash: await import('bcryptjs').then(bcrypt => bcrypt.hash('Password123!', 10)),
+      role: 'MANAGER',
+      orgId: org1.id,
+    },
+  });
+
+  const org1User = await prisma.user.create({
+    data: {
+      email: 'inspector@autoparts.example.com',
+      name: 'Tom Inspector',
+      passwordHash: await import('bcryptjs').then(bcrypt => bcrypt.hash('Password123!', 10)),
+      role: 'USER',
+      orgId: org1.id,
+    },
+  });
+
+  // Organization 2: Electronics company
+  const org2 = await createOrganization({
+    name: 'ElectroTech AG',
+    slug: 'electrotech-ag',
+    domain: 'electrotech.example.com',
+    adminEmail: 'admin@electrotech.example.com',
+    adminPassword: 'Password123!',
+    adminName: 'Lisa Schmidt',
+  });
+  console.log(`Created organization: ${org2.name} (ID: ${org2.id})`);
+
+  // Create additional users for ElectroTech
+  const org2Manager = await prisma.user.create({
+    data: {
+      email: 'manager@electrotech.example.com',
+      name: 'Peter Quality',
+      passwordHash: await import('bcryptjs').then(bcrypt => bcrypt.hash('Password123!', 10)),
+      role: 'MANAGER',
+      orgId: org2.id,
+    },
+  });
+
+  console.log('Organizations and users created!');
+  console.log('');
+  console.log('Test credentials:');
+  console.log('  AutoParts GmbH:');
+  console.log('    Admin: admin@autoparts.example.com / Password123!');
+  console.log('    Manager: manager@autoparts.example.com / Password123!');
+  console.log('    User: inspector@autoparts.example.com / Password123!');
+  console.log('  ElectroTech AG:');
+  console.log('    Admin: admin@electrotech.example.com / Password123!');
+  console.log('    Manager: manager@electrotech.example.com / Password123!');
+  console.log('');
+
+  // ============================================
+  // TEST PLANS FOR ORG 1 (AutoParts GmbH)
+  // ============================================
+
+  console.log('Creating test plans for AutoParts GmbH...');
+
   // Seed Test Plan for Technical Drawings
   const technicalDrawingPlan = await prisma.testPlan.create({
     data: {
+      orgId: org1.id,
       name: 'Technische Zeichnung - Standard',
       description: 'Standard-Prüfplan für technische Zeichnungen nach DIN ISO 128',
       category: 'TECHNICAL_DRAWING',
@@ -104,6 +184,7 @@ async function main() {
   // Seed Test Plan for Labels
   const labelPlan = await prisma.testPlan.create({
     data: {
+      orgId: org1.id,
       name: 'Etiketten-Prüfung',
       description: 'Prüfplan für Produktetiketten und Kennzeichnungen',
       category: 'LABEL',
@@ -160,6 +241,7 @@ async function main() {
   // Seed Test Plan for Invoices
   const invoicePlan = await prisma.testPlan.create({
     data: {
+      orgId: org1.id,
       name: 'Rechnungs-Prüfung',
       description: 'Prüfplan für Rechnungen gemäß UStG',
       category: 'INVOICE',
@@ -234,6 +316,7 @@ async function main() {
   // Workflow für technische Zeichnungen mit paralleler Prüfung
   const technicalDrawingWorkflow = await prisma.workflow.create({
     data: {
+      orgId: org1.id,
       name: 'Technische Zeichnung - Parallele Vollprüfung',
       description: 'Workflow mit paralleler Ausführung von Qualitätsprüfungen für maximale Effizienz',
       category: 'TECHNICAL_DRAWING',
@@ -368,6 +451,7 @@ async function main() {
   // Einfacher sequenzieller Workflow für Etiketten
   const labelWorkflow = await prisma.workflow.create({
     data: {
+      orgId: org1.id,
       name: 'Etiketten-Prüfung - Sequenziell',
       description: 'Sequenzieller Workflow für Etiketten-Prüfung',
       category: 'LABEL',
@@ -439,9 +523,136 @@ async function main() {
     ],
   });
 
+  // ============================================
+  // TEST PLANS FOR ORG 2 (ElectroTech AG)
+  // ============================================
+
+  console.log('Creating test plans for ElectroTech AG...');
+
+  // Simple test plan for Electronics labels
+  const org2LabelPlan = await prisma.testPlan.create({
+    data: {
+      orgId: org2.id,
+      name: 'Elektronik-Etiketten Prüfung',
+      description: 'Prüfplan für Elektronik-Etiketten mit CE, RoHS, WEEE',
+      category: 'LABEL',
+      active: true,
+      procedures: {
+        create: [
+          {
+            name: 'Elektronik-Kennzeichnungen',
+            description: 'Prüfung der gesetzlichen Kennzeichnungen für Elektronikprodukte',
+            order: 0,
+            steps: {
+              create: [
+                {
+                  name: 'CE-Kennzeichnung vorhanden',
+                  description: 'Prüft das Vorhandensein der CE-Kennzeichnung',
+                  checkType: 'LEGAL_REQUIREMENT',
+                  parameters: {
+                    requirement: 'CE-Kennzeichnung',
+                    mandatory: true,
+                  },
+                  order: 0,
+                  required: true,
+                },
+                {
+                  name: 'RoHS-Konformität',
+                  description: 'Prüft RoHS-Konformitätserklärung',
+                  checkType: 'LEGAL_REQUIREMENT',
+                  parameters: {
+                    requirement: 'RoHS',
+                    directive: '2011/65/EU',
+                  },
+                  order: 1,
+                  required: true,
+                },
+                {
+                  name: 'WEEE-Symbol vorhanden',
+                  description: 'Prüft durchgestrichene Mülltonne für WEEE',
+                  checkType: 'PRESENCE',
+                  parameters: {
+                    element: 'WEEE-Symbol',
+                    description: 'Durchgestrichene Mülltonne',
+                  },
+                  order: 2,
+                  required: true,
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  });
+
+  // Simple workflow for org 2
+  const org2LabelWorkflow = await prisma.workflow.create({
+    data: {
+      orgId: org2.id,
+      name: 'Elektronik-Etiketten Workflow',
+      description: 'Standard-Workflow für Elektronik-Etiketten',
+      category: 'LABEL',
+      active: true,
+    },
+  });
+
+  const org2StartNode = await prisma.workflowNode.create({
+    data: {
+      workflowId: org2LabelWorkflow.id,
+      name: 'Start',
+      nodeType: 'START',
+      config: {},
+      position: { x: 250, y: 50 },
+    },
+  });
+
+  const org2CeNode = await prisma.workflowNode.create({
+    data: {
+      workflowId: org2LabelWorkflow.id,
+      name: 'CE-Kennzeichnung prüfen',
+      nodeType: 'TEST_STEP',
+      config: {
+        stepId: org2LabelPlan.procedures[0].steps[0].id,
+      },
+      position: { x: 250, y: 150 },
+    },
+  });
+
+  const org2EndNode = await prisma.workflowNode.create({
+    data: {
+      workflowId: org2LabelWorkflow.id,
+      name: 'Ende',
+      nodeType: 'END',
+      config: {},
+      position: { x: 250, y: 250 },
+    },
+  });
+
+  await prisma.workflowEdge.createMany({
+    data: [
+      {
+        workflowId: org2LabelWorkflow.id,
+        sourceNodeId: org2StartNode.id,
+        targetNodeId: org2CeNode.id,
+      },
+      {
+        workflowId: org2LabelWorkflow.id,
+        sourceNodeId: org2CeNode.id,
+        targetNodeId: org2EndNode.id,
+      },
+    ],
+  });
+
   console.log('Seeding finished.');
-  console.log(`Created test plans: ${technicalDrawingPlan.id}, ${labelPlan.id}, ${invoicePlan.id}`);
-  console.log(`Created workflows: ${technicalDrawingWorkflow.id}, ${labelWorkflow.id}`);
+  console.log('');
+  console.log('AutoParts GmbH:');
+  console.log(`  Test plans: ${technicalDrawingPlan.id}, ${labelPlan.id}, ${invoicePlan.id}`);
+  console.log(`  Workflows: ${technicalDrawingWorkflow.id}, ${labelWorkflow.id}`);
+  console.log('');
+  console.log('ElectroTech AG:');
+  console.log(`  Test plans: ${org2LabelPlan.id}`);
+  console.log(`  Workflows: ${org2LabelWorkflow.id}`);
 }
 
 main()

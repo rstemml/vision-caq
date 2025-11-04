@@ -4,15 +4,18 @@ import { WorkflowEngine } from '@/lib/workflow-engine';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
+import { authenticatedRoute, getOrgId, AuthenticatedRequest } from '@/lib/middleware';
 
-export async function GET(request: NextRequest) {
+export const GET = authenticatedRoute(async (req: AuthenticatedRequest) => {
   try {
-    const { searchParams } = new URL(request.url);
+    const orgId = getOrgId(req);
+    const { searchParams } = new URL(req.url);
     const testPlanId = searchParams.get('testPlanId');
     const status = searchParams.get('status');
 
     const testRuns = await prisma.testRun.findMany({
       where: {
+        orgId,
         ...(testPlanId && { testPlanId }),
         ...(status && { status: status as any }),
       },
@@ -40,11 +43,12 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
 
-export async function POST(request: NextRequest) {
+export const POST = authenticatedRoute(async (req: AuthenticatedRequest) => {
   try {
-    const formData = await request.formData();
+    const orgId = getOrgId(req);
+    const formData = await req.formData();
     const file = formData.get('file') as File;
     const testPlanId = formData.get('testPlanId') as string;
     const workflowId = formData.get('workflowId') as string | null;
@@ -57,9 +61,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get test plan with procedures and steps
+    // Get test plan with procedures and steps (verify it belongs to org)
     const testPlan = await prisma.testPlan.findUnique({
-      where: { id: testPlanId },
+      where: { id: testPlanId, orgId },
       include: {
         procedures: {
           include: {
@@ -95,6 +99,7 @@ export async function POST(request: NextRequest) {
     // Create test run
     const testRun = await prisma.testRun.create({
       data: {
+        orgId,
         testPlanId,
         workflowId: useWorkflow && workflowId ? workflowId : null,
         fileName: file.name,
@@ -129,7 +134,7 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
 
 async function analyzeDocument(
   testRunId: string,

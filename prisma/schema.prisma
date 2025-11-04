@@ -7,9 +7,119 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ============================================
+// MULTI-TENANCY MODELS
+// ============================================
+
+// Organization/Tenant - Mandant/Kunde
+model Organization {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique  // z.B. "acme-corp"
+  domain      String?  @unique  // z.B. "acme-corp.com" für Email-basierte Auto-Join
+  settings    Json?    // Tenant-spezifische Einstellungen
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       User[]
+  testPlans   TestPlan[]
+  workflows   Workflow[]
+  testRuns    TestRun[]
+  apiKeys     ApiKey[]
+
+  @@map("organizations")
+}
+
+// User - Benutzer mit Authentication
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  passwordHash  String
+  role          UserRole  @default(USER)
+  orgId         String
+  active        Boolean   @default(true)
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  organization  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  auditLogs     AuditLog[]
+  sessions      Session[]
+
+  @@index([orgId])
+  @@index([email])
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN        // Org-Admin: Volle Rechte in Organisation
+  MANAGER      // Kann Prüfpläne erstellen/bearbeiten
+  USER         // Kann Prüfungen durchführen
+  VIEWER       // Nur Lesezugriff
+}
+
+// Session - für JWT-Alternative / Session Management
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@map("sessions")
+}
+
+// ApiKey - für API-Zugriff
+model ApiKey {
+  id          String   @id @default(cuid())
+  orgId       String
+  name        String   // z.B. "Production API Key"
+  keyHash     String   @unique
+  lastUsedAt  DateTime?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@map("api_keys")
+}
+
+// AuditLog - für Compliance (GMP, IATF, etc.)
+model AuditLog {
+  id          String   @id @default(cuid())
+  orgId       String
+  userId      String?
+  action      String   // "test_plan.created", "test.executed"
+  entityType  String   // "TestPlan", "TestRun"
+  entityId    String
+  changes     Json?    // Old vs New values
+  metadata    Json?    // IP, UserAgent, etc.
+  timestamp   DateTime @default(now())
+
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([orgId])
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([timestamp])
+  @@map("audit_logs")
+}
+
+// ============================================
+// PRÜFPLAN MODELS (mit Multi-Tenancy)
+// ============================================
+
 // Prüfplan - definiert welche Prüfungen durchgeführt werden sollen
 model TestPlan {
   id          String      @id @default(cuid())
+  orgId       String      // Multi-Tenancy
   name        String
   description String?
   category    DocumentCategory // Zeichnung, Etikett, Rechnung
@@ -17,9 +127,12 @@ model TestPlan {
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   procedures  Procedure[]
   testRuns    TestRun[]
 
+  @@index([orgId])
+  @@index([orgId, active])
   @@map("test_plans")
 }
 
@@ -77,6 +190,7 @@ enum CheckType {
 // Prüfung - eine Instanz der Prüfung eines PDFs
 model TestRun {
   id              String        @id @default(cuid())
+  orgId           String        // Multi-Tenancy
   testPlanId      String
   workflowId      String?       // Optional: Workflow-basierte Prüfung
   fileName        String
@@ -86,12 +200,16 @@ model TestRun {
   startedAt       DateTime      @default(now())
   completedAt     DateTime?
 
+  organization    Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
   testPlan        TestPlan           @relation(fields: [testPlanId], references: [id])
   workflow        Workflow?          @relation(fields: [workflowId], references: [id])
   testReport      TestReport?
   testResults     TestResult[]
   workflowExecution WorkflowExecution?
 
+  @@index([orgId])
+  @@index([orgId, status])
+  @@index([testPlanId])
   @@map("test_runs")
 }
 
@@ -146,6 +264,7 @@ enum ResultStatus {
 // Workflow - Template für die Orchestrierung von Prüfungen
 model Workflow {
   id              String        @id @default(cuid())
+  orgId           String        // Multi-Tenancy
   name            String
   description     String?
   category        DocumentCategory
@@ -154,11 +273,14 @@ model Workflow {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
+  organization    Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
   nodes           WorkflowNode[]
   edges           WorkflowEdge[]
   executions      WorkflowExecution[]
   testRuns        TestRun[]
 
+  @@index([orgId])
+  @@index([orgId, active])
   @@map("workflows")
 }
 

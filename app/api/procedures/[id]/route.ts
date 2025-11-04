@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
+import { authenticatedRoute, getOrgId, can, AuthenticatedRequest } from '@/lib/middleware';
 
 const procedureUpdateSchema = z.object({
   name: z.string().min(1).optional(),
@@ -8,15 +9,38 @@ const procedureUpdateSchema = z.object({
   order: z.number().optional(),
 });
 
-export async function PATCH(
-  request: NextRequest,
+export const PATCH = authenticatedRoute(async (
+  req: AuthenticatedRequest,
   { params }: { params: { id: string } }
-) {
+) => {
   try {
-    const body = await request.json();
+    const orgId = getOrgId(req);
+
+    // Check if user has permission to update procedures
+    if (!can(req, 'testPlan', 'update')) {
+      return NextResponse.json(
+        { error: 'Keine Berechtigung zum Bearbeiten von Prüfplänen' },
+        { status: 403 }
+      );
+    }
+
+    // Verify procedure belongs to organization
+    const procedure = await prisma.procedure.findUnique({
+      where: { id: params.id },
+      include: { testPlan: true },
+    });
+
+    if (!procedure || procedure.testPlan.orgId !== orgId) {
+      return NextResponse.json(
+        { error: 'Prozedur nicht gefunden' },
+        { status: 404 }
+      );
+    }
+
+    const body = await req.json();
     const validatedData = procedureUpdateSchema.parse(body);
 
-    const procedure = await prisma.procedure.update({
+    const updatedProcedure = await prisma.procedure.update({
       where: { id: params.id },
       data: validatedData,
       include: {
@@ -24,7 +48,7 @@ export async function PATCH(
       },
     });
 
-    return NextResponse.json(procedure);
+    return NextResponse.json(updatedProcedure);
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -38,13 +62,36 @@ export async function PATCH(
       { status: 500 }
     );
   }
-}
+});
 
-export async function DELETE(
-  request: NextRequest,
+export const DELETE = authenticatedRoute(async (
+  req: AuthenticatedRequest,
   { params }: { params: { id: string } }
-) {
+) => {
   try {
+    const orgId = getOrgId(req);
+
+    // Check if user has permission to delete procedures
+    if (!can(req, 'testPlan', 'update')) {
+      return NextResponse.json(
+        { error: 'Keine Berechtigung zum Bearbeiten von Prüfplänen' },
+        { status: 403 }
+      );
+    }
+
+    // Verify procedure belongs to organization
+    const procedure = await prisma.procedure.findUnique({
+      where: { id: params.id },
+      include: { testPlan: true },
+    });
+
+    if (!procedure || procedure.testPlan.orgId !== orgId) {
+      return NextResponse.json(
+        { error: 'Prozedur nicht gefunden' },
+        { status: 404 }
+      );
+    }
+
     await prisma.procedure.delete({
       where: { id: params.id },
     });
@@ -57,4 +104,4 @@ export async function DELETE(
       { status: 500 }
     );
   }
-}
+});

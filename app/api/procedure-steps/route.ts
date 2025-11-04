@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
+import { authenticatedRoute, getOrgId, can, AuthenticatedRequest } from '@/lib/middleware';
 
 const stepSchema = z.object({
   name: z.string().min(1, 'Name ist erforderlich'),
@@ -20,10 +21,33 @@ const stepSchema = z.object({
   procedureId: z.string(),
 });
 
-export async function POST(request: NextRequest) {
+export const POST = authenticatedRoute(async (req: AuthenticatedRequest) => {
   try {
-    const body = await request.json();
+    const orgId = getOrgId(req);
+
+    // Check if user has permission to create steps
+    if (!can(req, 'testPlan', 'update')) {
+      return NextResponse.json(
+        { error: 'Keine Berechtigung zum Bearbeiten von Prüfplänen' },
+        { status: 403 }
+      );
+    }
+
+    const body = await req.json();
     const validatedData = stepSchema.parse(body);
+
+    // Verify procedure belongs to organization
+    const procedure = await prisma.procedure.findUnique({
+      where: { id: validatedData.procedureId },
+      include: { testPlan: true },
+    });
+
+    if (!procedure || procedure.testPlan.orgId !== orgId) {
+      return NextResponse.json(
+        { error: 'Prozedur nicht gefunden' },
+        { status: 404 }
+      );
+    }
 
     const step = await prisma.procedureStep.create({
       data: validatedData,
@@ -43,4 +67,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
+import { authenticatedRoute, getOrgId, can, AuthenticatedRequest } from '@/lib/middleware';
 
 const nodeSchema = z.object({
   name: z.string().min(1, 'Name ist erforderlich'),
@@ -23,12 +24,34 @@ const nodeSchema = z.object({
     .optional(),
 });
 
-export async function POST(
-  request: NextRequest,
+export const POST = authenticatedRoute(async (
+  req: AuthenticatedRequest,
   { params }: { params: { id: string } }
-) {
+) => {
   try {
-    const body = await request.json();
+    const orgId = getOrgId(req);
+
+    // Check if user has permission to create nodes
+    if (!can(req, 'workflow', 'update')) {
+      return NextResponse.json(
+        { error: 'Keine Berechtigung zum Bearbeiten von Workflows' },
+        { status: 403 }
+      );
+    }
+
+    // Verify workflow belongs to organization
+    const workflow = await prisma.workflow.findUnique({
+      where: { id: params.id, orgId },
+    });
+
+    if (!workflow) {
+      return NextResponse.json(
+        { error: 'Workflow nicht gefunden' },
+        { status: 404 }
+      );
+    }
+
+    const body = await req.json();
     const validatedData = nodeSchema.parse(body);
 
     const node = await prisma.workflowNode.create({
@@ -52,14 +75,36 @@ export async function POST(
       { status: 500 }
     );
   }
-}
+});
 
-export async function PATCH(
-  request: NextRequest,
+export const PATCH = authenticatedRoute(async (
+  req: AuthenticatedRequest,
   { params }: { params: { id: string } }
-) {
+) => {
   try {
-    const body = await request.json();
+    const orgId = getOrgId(req);
+
+    // Check if user has permission to update nodes
+    if (!can(req, 'workflow', 'update')) {
+      return NextResponse.json(
+        { error: 'Keine Berechtigung zum Bearbeiten von Workflows' },
+        { status: 403 }
+      );
+    }
+
+    // Verify workflow belongs to organization
+    const workflow = await prisma.workflow.findUnique({
+      where: { id: params.id, orgId },
+    });
+
+    if (!workflow) {
+      return NextResponse.json(
+        { error: 'Workflow nicht gefunden' },
+        { status: 404 }
+      );
+    }
+
+    const body = await req.json();
     const { nodeId, ...data } = body;
 
     const node = await prisma.workflowNode.update({
@@ -75,14 +120,36 @@ export async function PATCH(
       { status: 500 }
     );
   }
-}
+});
 
-export async function DELETE(
-  request: NextRequest,
+export const DELETE = authenticatedRoute(async (
+  req: AuthenticatedRequest,
   { params }: { params: { id: string } }
-) {
+) => {
   try {
-    const { searchParams } = new URL(request.url);
+    const orgId = getOrgId(req);
+
+    // Check if user has permission to delete nodes
+    if (!can(req, 'workflow', 'update')) {
+      return NextResponse.json(
+        { error: 'Keine Berechtigung zum Bearbeiten von Workflows' },
+        { status: 403 }
+      );
+    }
+
+    // Verify workflow belongs to organization
+    const workflow = await prisma.workflow.findUnique({
+      where: { id: params.id, orgId },
+    });
+
+    if (!workflow) {
+      return NextResponse.json(
+        { error: 'Workflow nicht gefunden' },
+        { status: 404 }
+      );
+    }
+
+    const { searchParams } = new URL(req.url);
     const nodeId = searchParams.get('nodeId');
 
     if (!nodeId) {
@@ -104,4 +171,4 @@ export async function DELETE(
       { status: 500 }
     );
   }
-}
+});
