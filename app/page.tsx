@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FileText, ClipboardCheck, BarChart3, Upload } from "lucide-react";
+import { FileText, ClipboardCheck, BarChart3, Upload, GitBranch } from "lucide-react";
 
 export default function Home() {
   return (
@@ -21,6 +21,17 @@ export default function Home() {
           </div>
 
           <div className="grid md:grid-cols-2 gap-6 mb-12">
+            <Link
+              href="/workflows"
+              className="group p-6 border rounded-lg hover:border-primary hover:shadow-lg transition-all"
+            >
+              <GitBranch className="h-12 w-12 text-primary mb-4" />
+              <h3 className="text-xl font-semibold mb-2">Workflows</h3>
+              <p className="text-muted-foreground">
+                Orchestrieren Sie Prüfungen mit flexiblen Workflows (parallel, sequenziell, bedingt)
+              </p>
+            </Link>
+
             <Link
               href="/test-plans"
               className="group p-6 border rounded-lg hover:border-primary hover:shadow-lg transition-all"

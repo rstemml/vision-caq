@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { WorkflowEngine } from '@/lib/workflow-engine';
 import { writeFile, mkdir } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
@@ -17,7 +18,9 @@ export async function GET(request: NextRequest) {
       },
       include: {
         testPlan: true,
+        workflow: true,
         testReport: true,
+        workflowExecution: true,
         _count: {
           select: {
             testResults: true,
@@ -44,6 +47,8 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const testPlanId = formData.get('testPlanId') as string;
+    const workflowId = formData.get('workflowId') as string | null;
+    const useWorkflow = formData.get('useWorkflow') === 'true';
 
     if (!file || !testPlanId) {
       return NextResponse.json(
@@ -91,6 +96,7 @@ export async function POST(request: NextRequest) {
     const testRun = await prisma.testRun.create({
       data: {
         testPlanId,
+        workflowId: useWorkflow && workflowId ? workflowId : null,
         fileName: file.name,
         filePath: fileName,
         fileSize: buffer.length,
@@ -98,13 +104,22 @@ export async function POST(request: NextRequest) {
       },
       include: {
         testPlan: true,
+        workflow: true,
       },
     });
 
-    // Start analysis in background
-    analyzeDocument(testRun.id, filePath, testPlan, buffer).catch((error) => {
-      console.error('Error analyzing document:', error);
-    });
+    // Start analysis - either with workflow or traditional
+    if (useWorkflow && workflowId) {
+      // Workflow-basierte Prüfung
+      analyzeDocumentWithWorkflow(testRun.id, workflowId, buffer).catch((error) => {
+        console.error('Error analyzing document with workflow:', error);
+      });
+    } else {
+      // Traditionelle Prüfung
+      analyzeDocument(testRun.id, filePath, testPlan, buffer).catch((error) => {
+        console.error('Error analyzing document:', error);
+      });
+    }
 
     return NextResponse.json(testRun, { status: 201 });
   } catch (error) {
@@ -181,6 +196,35 @@ async function analyzeDocument(
 
   } catch (error) {
     console.error('Error in analysis:', error);
+    await prisma.testRun.update({
+      where: { id: testRunId },
+      data: { status: 'FAILED' },
+    });
+  }
+}
+
+async function analyzeDocumentWithWorkflow(
+  testRunId: string,
+  workflowId: string,
+  fileBuffer: Buffer
+) {
+  try {
+    // Update status to IN_PROGRESS
+    await prisma.testRun.update({
+      where: { id: testRunId },
+      data: { status: 'IN_PROGRESS' },
+    });
+
+    // Starte Workflow-Ausführung
+    await WorkflowEngine.execute(workflowId, testRunId, {
+      variables: {},
+      testRunId,
+      pdfData: fileBuffer,
+    });
+
+    // Der Workflow-Engine updated den Status automatisch
+  } catch (error) {
+    console.error('Error in workflow analysis:', error);
     await prisma.testRun.update({
       where: { id: testRunId },
       data: { status: 'FAILED' },

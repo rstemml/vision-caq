@@ -225,8 +225,223 @@ async function main() {
     },
   });
 
+  // ============================================
+  // WORKFLOWS
+  // ============================================
+
+  console.log('Creating example workflows...');
+
+  // Workflow für technische Zeichnungen mit paralleler Prüfung
+  const technicalDrawingWorkflow = await prisma.workflow.create({
+    data: {
+      name: 'Technische Zeichnung - Parallele Vollprüfung',
+      description: 'Workflow mit paralleler Ausführung von Qualitätsprüfungen für maximale Effizienz',
+      category: 'TECHNICAL_DRAWING',
+      active: true,
+    },
+  });
+
+  // Erstelle Workflow-Knoten
+  const startNode = await prisma.workflowNode.create({
+    data: {
+      workflowId: technicalDrawingWorkflow.id,
+      name: 'Start',
+      nodeType: 'START',
+      config: {},
+      position: { x: 250, y: 50 },
+    },
+  });
+
+  const grunddatenNode = await prisma.workflowNode.create({
+    data: {
+      workflowId: technicalDrawingWorkflow.id,
+      name: 'Grunddaten-Prüfung',
+      description: 'Prüft Pflichtangaben (Zeichnungsnummer, Maßstab, etc.)',
+      nodeType: 'TEST_STEP',
+      config: {
+        stepId: technicalDrawingPlan.procedures[0].steps[0].id, // Zeichnungsnummer
+      },
+      position: { x: 250, y: 150 },
+    },
+  });
+
+  const parallelGateway = await prisma.workflowNode.create({
+    data: {
+      workflowId: technicalDrawingWorkflow.id,
+      name: 'Parallele Prüfungen',
+      description: 'Startet mehrere Prüfungen parallel',
+      nodeType: 'PARALLEL_GATEWAY',
+      config: {},
+      position: { x: 250, y: 250 },
+    },
+  });
+
+  const normenNode = await prisma.workflowNode.create({
+    data: {
+      workflowId: technicalDrawingWorkflow.id,
+      name: 'DIN ISO 128 Prüfung',
+      description: 'Prüft Konformität mit DIN ISO 128',
+      nodeType: 'TEST_STEP',
+      config: {
+        stepId: technicalDrawingPlan.procedures[1].steps[0].id, // DIN-Standard
+      },
+      position: { x: 100, y: 350 },
+    },
+  });
+
+  const bildqualitaetNode = await prisma.workflowNode.create({
+    data: {
+      workflowId: technicalDrawingWorkflow.id,
+      name: 'Bildqualität',
+      description: 'Prüft Bildqualität und Lesbarkeit',
+      nodeType: 'TEST_STEP',
+      config: {
+        stepId: technicalDrawingPlan.procedures[2].steps[0].id, // Bildqualität
+      },
+      position: { x: 400, y: 350 },
+    },
+  });
+
+  const parallelJoin = await prisma.workflowNode.create({
+    data: {
+      workflowId: technicalDrawingWorkflow.id,
+      name: 'Parallele Prüfungen zusammenführen',
+      nodeType: 'PARALLEL_JOIN',
+      config: {},
+      position: { x: 250, y: 450 },
+    },
+  });
+
+  const endNode = await prisma.workflowNode.create({
+    data: {
+      workflowId: technicalDrawingWorkflow.id,
+      name: 'Ende',
+      nodeType: 'END',
+      config: {},
+      position: { x: 250, y: 550 },
+    },
+  });
+
+  // Erstelle Workflow-Edges (Verbindungen)
+  await prisma.workflowEdge.createMany({
+    data: [
+      {
+        workflowId: technicalDrawingWorkflow.id,
+        sourceNodeId: startNode.id,
+        targetNodeId: grunddatenNode.id,
+      },
+      {
+        workflowId: technicalDrawingWorkflow.id,
+        sourceNodeId: grunddatenNode.id,
+        targetNodeId: parallelGateway.id,
+      },
+      {
+        workflowId: technicalDrawingWorkflow.id,
+        sourceNodeId: parallelGateway.id,
+        targetNodeId: normenNode.id,
+        label: 'Parallel 1',
+      },
+      {
+        workflowId: technicalDrawingWorkflow.id,
+        sourceNodeId: parallelGateway.id,
+        targetNodeId: bildqualitaetNode.id,
+        label: 'Parallel 2',
+      },
+      {
+        workflowId: technicalDrawingWorkflow.id,
+        sourceNodeId: normenNode.id,
+        targetNodeId: parallelJoin.id,
+      },
+      {
+        workflowId: technicalDrawingWorkflow.id,
+        sourceNodeId: bildqualitaetNode.id,
+        targetNodeId: parallelJoin.id,
+      },
+      {
+        workflowId: technicalDrawingWorkflow.id,
+        sourceNodeId: parallelJoin.id,
+        targetNodeId: endNode.id,
+      },
+    ],
+  });
+
+  // Einfacher sequenzieller Workflow für Etiketten
+  const labelWorkflow = await prisma.workflow.create({
+    data: {
+      name: 'Etiketten-Prüfung - Sequenziell',
+      description: 'Sequenzieller Workflow für Etiketten-Prüfung',
+      category: 'LABEL',
+      active: true,
+    },
+  });
+
+  const labelStartNode = await prisma.workflowNode.create({
+    data: {
+      workflowId: labelWorkflow.id,
+      name: 'Start',
+      nodeType: 'START',
+      config: {},
+      position: { x: 250, y: 50 },
+    },
+  });
+
+  const ceKennzeichnungNode = await prisma.workflowNode.create({
+    data: {
+      workflowId: labelWorkflow.id,
+      name: 'CE-Kennzeichnung prüfen',
+      nodeType: 'TEST_STEP',
+      config: {
+        stepId: labelPlan.procedures[0].steps[0].id, // CE-Kennzeichnung
+      },
+      position: { x: 250, y: 150 },
+    },
+  });
+
+  const artikelnummerNode = await prisma.workflowNode.create({
+    data: {
+      workflowId: labelWorkflow.id,
+      name: 'Artikelnummer prüfen',
+      nodeType: 'TEST_STEP',
+      config: {
+        stepId: labelPlan.procedures[0].steps[1].id, // Artikelnummer
+      },
+      position: { x: 250, y: 250 },
+    },
+  });
+
+  const labelEndNode = await prisma.workflowNode.create({
+    data: {
+      workflowId: labelWorkflow.id,
+      name: 'Ende',
+      nodeType: 'END',
+      config: {},
+      position: { x: 250, y: 350 },
+    },
+  });
+
+  await prisma.workflowEdge.createMany({
+    data: [
+      {
+        workflowId: labelWorkflow.id,
+        sourceNodeId: labelStartNode.id,
+        targetNodeId: ceKennzeichnungNode.id,
+      },
+      {
+        workflowId: labelWorkflow.id,
+        sourceNodeId: ceKennzeichnungNode.id,
+        targetNodeId: artikelnummerNode.id,
+      },
+      {
+        workflowId: labelWorkflow.id,
+        sourceNodeId: artikelnummerNode.id,
+        targetNodeId: labelEndNode.id,
+      },
+    ],
+  });
+
   console.log('Seeding finished.');
   console.log(`Created test plans: ${technicalDrawingPlan.id}, ${labelPlan.id}, ${invoicePlan.id}`);
+  console.log(`Created workflows: ${technicalDrawingWorkflow.id}, ${labelWorkflow.id}`);
 }
 
 main()

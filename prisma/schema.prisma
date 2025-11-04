@@ -78,6 +78,7 @@ enum CheckType {
 model TestRun {
   id              String        @id @default(cuid())
   testPlanId      String
+  workflowId      String?       // Optional: Workflow-basierte Prüfung
   fileName        String
   filePath        String
   fileSize        Int
@@ -85,9 +86,11 @@ model TestRun {
   startedAt       DateTime      @default(now())
   completedAt     DateTime?
 
-  testPlan        TestPlan      @relation(fields: [testPlanId], references: [id])
+  testPlan        TestPlan           @relation(fields: [testPlanId], references: [id])
+  workflow        Workflow?          @relation(fields: [workflowId], references: [id])
   testReport      TestReport?
   testResults     TestResult[]
+  workflowExecution WorkflowExecution?
 
   @@map("test_runs")
 }
@@ -134,4 +137,128 @@ enum ResultStatus {
   FAILED
   WARNING
   NOT_APPLICABLE
+}
+
+// ============================================
+// WORKFLOW ENGINE
+// ============================================
+
+// Workflow - Template für die Orchestrierung von Prüfungen
+model Workflow {
+  id              String        @id @default(cuid())
+  name            String
+  description     String?
+  category        DocumentCategory
+  version         Int           @default(1)
+  active          Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  nodes           WorkflowNode[]
+  edges           WorkflowEdge[]
+  executions      WorkflowExecution[]
+  testRuns        TestRun[]
+
+  @@map("workflows")
+}
+
+// WorkflowNode - Einzelner Knoten im Workflow
+model WorkflowNode {
+  id              String           @id @default(cuid())
+  workflowId      String
+  name            String
+  description     String?
+  nodeType        WorkflowNodeType
+  config          Json             // Node-spezifische Konfiguration
+  position        Json?            // Position für UI (x, y)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  workflow        Workflow         @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  outgoingEdges   WorkflowEdge[]   @relation("SourceNode")
+  incomingEdges   WorkflowEdge[]   @relation("TargetNode")
+  executions      WorkflowNodeExecution[]
+
+  @@map("workflow_nodes")
+}
+
+enum WorkflowNodeType {
+  START              // Start-Knoten
+  END                // End-Knoten
+  TEST_STEP          // Prüfschritt ausführen
+  PARALLEL_GATEWAY   // Parallele Ausführung starten
+  PARALLEL_JOIN      // Parallele Ausführung zusammenführen
+  CONDITION          // Bedingte Verzweigung
+  WAIT               // Warten auf externe Eingabe
+}
+
+// WorkflowEdge - Verbindung zwischen Knoten
+model WorkflowEdge {
+  id              String        @id @default(cuid())
+  workflowId      String
+  sourceNodeId    String
+  targetNodeId    String
+  condition       Json?         // Optionale Bedingung für die Aktivierung
+  label           String?       // Label für UI
+  createdAt       DateTime      @default(now())
+
+  workflow        Workflow      @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  sourceNode      WorkflowNode  @relation("SourceNode", fields: [sourceNodeId], references: [id], onDelete: Cascade)
+  targetNode      WorkflowNode  @relation("TargetNode", fields: [targetNodeId], references: [id], onDelete: Cascade)
+
+  @@map("workflow_edges")
+}
+
+// WorkflowExecution - Laufende Workflow-Instanz
+model WorkflowExecution {
+  id              String                  @id @default(cuid())
+  workflowId      String
+  testRunId       String                  @unique
+  status          WorkflowExecutionStatus @default(PENDING)
+  currentNodeId   String?                 // Aktuell aktiver Knoten
+  variables       Json?                   // Workflow-Variablen
+  startedAt       DateTime                @default(now())
+  completedAt     DateTime?
+  error           String?
+
+  workflow        Workflow                @relation(fields: [workflowId], references: [id])
+  testRun         TestRun                 @relation(fields: [testRunId], references: [id], onDelete: Cascade)
+  nodeExecutions  WorkflowNodeExecution[]
+
+  @@map("workflow_executions")
+}
+
+enum WorkflowExecutionStatus {
+  PENDING
+  RUNNING
+  WAITING        // Wartet auf externe Eingabe
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+// WorkflowNodeExecution - Ausführungsstatus einzelner Knoten
+model WorkflowNodeExecution {
+  id                String                    @id @default(cuid())
+  executionId       String
+  nodeId            String
+  status            WorkflowNodeExecutionStatus @default(PENDING)
+  input             Json?                     // Input-Daten
+  output            Json?                     // Output-Daten
+  error             String?
+  startedAt         DateTime?
+  completedAt       DateTime?
+
+  execution         WorkflowExecution         @relation(fields: [executionId], references: [id], onDelete: Cascade)
+  node              WorkflowNode              @relation(fields: [nodeId], references: [id])
+
+  @@map("workflow_node_executions")
+}
+
+enum WorkflowNodeExecutionStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  SKIPPED
 }
