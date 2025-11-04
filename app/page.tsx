@@ -1,15 +1,15 @@
+"use client";
+
 import Link from "next/link";
 import { FileText, ClipboardCheck, BarChart3, Upload, GitBranch } from "lucide-react";
+import { ProtectedRoute } from "@/components/protected-route";
+import { AppHeader } from "@/components/app-header";
 
 export default function Home() {
   return (
-    <div className="flex flex-col min-h-screen">
-      <header className="border-b">
-        <div className="container mx-auto px-4 py-4">
-          <h1 className="text-2xl font-bold text-primary">Vision CAQ</h1>
-          <p className="text-sm text-muted-foreground">Computer Aided Quality</p>
-        </div>
-      </header>
+    <ProtectedRoute>
+      <div className="flex flex-col min-h-screen">
+        <AppHeader />
 
       <main className="flex-1 container mx-auto px-4 py-12">
         <div className="max-w-4xl mx-auto">
@@ -100,6 +100,7 @@ export default function Home() {
           Vision CAQ - Powered by AI
         </div>
       </footer>
-    </div>
+      </div>
+    </ProtectedRoute>
   );
 }

@@ -2,6 +2,9 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { ProtectedRoute } from "@/components/protected-route";
+import { AppHeader } from "@/components/app-header";
+import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -25,6 +28,7 @@ const resultLabels = {
 };
 
 export default function TestRunsPage() {
+  const { token } = useAuth();
   const [testPlans, setTestPlans] = useState<any[]>([]);
   const [testRuns, setTestRuns] = useState<any[]>([]);
   const [selectedTestPlan, setSelectedTestPlan] = useState("");
@@ -33,15 +37,23 @@ export default function TestRunsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchTestPlans();
-    fetchTestRuns();
-  }, []);
+    if (token) {
+      fetchTestPlans();
+      fetchTestRuns();
+    }
+  }, [token]);
 
   const fetchTestPlans = async () => {
     try {
-      const response = await fetch("/api/test-plans?active=true");
-      const data = await response.json();
-      setTestPlans(data);
+      const response = await fetch("/api/test-plans?active=true", {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setTestPlans(data);
+      }
     } catch (error) {
       console.error("Error fetching test plans:", error);
     }
@@ -49,9 +61,15 @@ export default function TestRunsPage() {
 
   const fetchTestRuns = async () => {
     try {
-      const response = await fetch("/api/test-runs");
-      const data = await response.json();
-      setTestRuns(data);
+      const response = await fetch("/api/test-runs", {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setTestRuns(data);
+      }
     } catch (error) {
       console.error("Error fetching test runs:", error);
     } finally {
@@ -82,6 +100,9 @@ export default function TestRunsPage() {
 
       const response = await fetch("/api/test-runs", {
         method: "POST",
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
         body: formData,
       });
 
@@ -106,14 +127,9 @@ export default function TestRunsPage() {
   };
 
   return (
-    <div className="min-h-screen">
-      <header className="border-b">
-        <div className="container mx-auto px-4 py-4">
-          <Link href="/" className="text-2xl font-bold text-primary">
-            Vision CAQ
-          </Link>
-        </div>
-      </header>
+    <ProtectedRoute>
+      <div className="min-h-screen">
+        <AppHeader />
 
       <main className="container mx-auto px-4 py-8">
         <h1 className="text-3xl font-bold mb-8">Dokument prüfen</h1>
@@ -263,6 +279,7 @@ export default function TestRunsPage() {
           </div>
         </div>
       </main>
-    </div>
+      </div>
+    </ProtectedRoute>
   );
 }
